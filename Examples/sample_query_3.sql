@@ -1,7 +1,7 @@
 
 -- Query to demo 'Inefficient Partition Pruning'
 
---use schema snowflake_sample_data.tpch_sf1000;
+--use schema snowflake_sample_data.tpch_sf1;
 
 --alter session set use_cached_result  = false;
 
@@ -30,4 +30,4 @@ ORDER BY
 
 ------------------
 
---01bb35a3-3204-3964-0000-00022fc65045
+--01bb89b2-3204-463f-0002-2fc6000b5696
