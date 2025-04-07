@@ -33,14 +33,18 @@ warnings.filterwarnings(
 
 # Fill - Snowflake Query Id, Snowflake Query file path
  
-query_id_code = [("01bb4c8c-3204-3c79-0002-2fc60004502e", "C:/Users/Narendra Meenaga/OneDrive - Acumen Consulting Ltd/Desktop/Code/Snowflake-Performance-Analysis/Examples/sample_query_1.sql"),
-                 ("01bb3c67-3204-3926-0000-00022fc6e3e9", "C:/Users/Narendra Meenaga/OneDrive - Acumen Consulting Ltd/Desktop/Code/Snowflake-Performance-Analysis/Examples/sample_query_2.sql"),
-                 ("01bb89b2-3204-463f-0002-2fc6000b5696", "C:/Users/Narendra Meenaga/OneDrive - Acumen Consulting Ltd/Desktop/Code/Snowflake-Performance-Analysis/Examples/sample_query_3.sql"),
-                ("01bb6e5f-3204-43bd-0002-2fc60007102a", "C:/Users/Narendra Meenaga/OneDrive - Acumen Consulting Ltd/Desktop/Code/Snowflake-Performance-Analysis/Examples/sample_query_4.sql")]
+query_id_code = [("01bb4c8c-3204-3c79-0002-2fc60004502e", "....sample_query_1.sql"),
+                 ("01bb3c67-3204-3926-0000-00022fc6e3e9", "....sample_query_2.sql"),
+                 ("01bb89b2-3204-463f-0002-2fc6000b5696", "....sample_query_3.sql"),
+                ("01bb6e5f-3204-43bd-0002-2fc60007102a", "....sample_query_4.sql")]
 
 
 # Fill - Results Excel sheet path
 results_file_path = ".../results.xlsx"
+
+# Values to set
+terms_to_remove = "\sWHERE\s|\sIN\s|\sAND\s|\sOR\s|\sAS\s|\sCAST\s|\(|\)"
+string_compare_threshold = 50
 
 
 # Create Session
@@ -78,8 +82,7 @@ result_df  = session.create_dataframe([], final_result_schema)
 
 expr_alias_dict = {}
 
-terms_to_remove = "\sWHERE\s|\sIN\s|\sAND\s|\sOR\s|\sAS\s|\sCAST\s|\(|\)"
-string_compare_threshold = 40
+
 
 def query_operator_stats(query_id):
     stats_df = session.sql("select * from table(get_query_operator_stats('"  + query_id + "'))")
