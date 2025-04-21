@@ -25,6 +25,7 @@ connection_parameters = {
    "warehouse":""
 }
 
+
 warnings.filterwarnings(
     action='ignore',
     category=UserWarning,
@@ -32,19 +33,25 @@ warnings.filterwarnings(
 )
 
 # Fill - Snowflake Query Id, Snowflake Query file path
- 
-query_id_code = [("01bb4c8c-3204-3c79-0002-2fc60004502e", "....sample_query_1.sql"),
-                 ("01bb3c67-3204-3926-0000-00022fc6e3e9", "....sample_query_2.sql"),
-                 ("01bb89b2-3204-463f-0002-2fc6000b5696", "....sample_query_3.sql"),
-                ("01bb6e5f-3204-43bd-0002-2fc60007102a", "....sample_query_4.sql")]
+
+query_id_code = [("01bb4c8c-3204-3c79-0002-2fc60004502e", "C:/Users/Narendra Meenaga/OneDrive - Acumen Consulting Ltd/Desktop/Code/Snowflake-Performance-Analysis/Examples/sample_query_1.sql"),
+                 ("01bb8f79-3204-4832-0002-2fc6000c92fa", "C:/Users/Narendra Meenaga/OneDrive - Acumen Consulting Ltd/Desktop/Code/Snowflake-Performance-Analysis/Examples/sample_query_2.sql"),
+                 ("01bb89b2-3204-463f-0002-2fc6000b5696", "C:/Users/Narendra Meenaga/OneDrive - Acumen Consulting Ltd/Desktop/Code/Snowflake-Performance-Analysis/Examples/sample_query_3.sql"), 
+                 ("01bb6e5f-3204-43bd-0002-2fc60007102a", "C:/Users/Narendra Meenaga/OneDrive - Acumen Consulting Ltd/Desktop/Code/Snowflake-Performance-Analysis/Examples/sample_query_4.sql"),
+                 ("01bb8fea-3204-48f5-0002-2fc6000cd012", "C:/Users/Narendra Meenaga/OneDrive - Acumen Consulting Ltd/Desktop/Code/Snowflake-Performance-Analysis/Examples/sample_query_5.sql")]
 
 
 # Fill - Results Excel sheet path
 results_file_path = ".../results.xlsx"
 
 # Values to set
-terms_to_remove = "\sWHERE\s|\sIN\s|\sAND\s|\sOR\s|\sAS\s|\sCAST\s|\(|\)"
+terms_to_remove =  "WHERE\s|\sIN\s|\sAND\s|\sOR\s|\sCAST|\sAS\s|\(|\)"
 string_compare_threshold = 50
+output_to_input_rows_ratio_threshold   = 1
+bytes_spilled_local_storage_threshold  = 0
+bytes_spilled_remote_storage_threshold = 0
+partitions_scanned_ratio_threshold     = 0.9
+queued_overload_time_threshold         = 0
 
 
 # Create Session
@@ -85,6 +92,7 @@ expr_alias_dict = {}
 
 
 def query_operator_stats(query_id):
+
     stats_df = session.sql("select * from table(get_query_operator_stats('"  + query_id + "'))")
     
     result_stats_df = stats_df.withColumn('execution_time_percentage_num', stats_df['execution_time_breakdown']['overall_percentage'])\
@@ -127,13 +135,13 @@ def parse_sql(sql_file):
 
             ast = parse_one(sql_code, dialect="snowflake")
 
+            print(ast.args.keys())
 
             for select in ast.find_all(exp.Select):
                 for expr in select.expressions:       
                     if expr.alias:
                         column_expr = str(expr).lower().replace(expr.alias, '').replace('as', '')
                         expr_alias_dict[column_expr.strip()] = expr.alias.strip()
-
 
    
             if 'from' in ast.args:
@@ -167,6 +175,7 @@ def parse_sql(sql_file):
                    
     else :
         print("File doesnot exists")
+        exit()
 
     return sql_main_code
 
@@ -258,8 +267,8 @@ def identify_code(stats_df, sql_main_code, sql_cte_code):
 
             case 'Filter':
                 if 'where' in sql_main_code:
-                    where_line = re.sub(terms_to_remove, " ", sql_main_code['where'])
-                    operator_filter = re.sub(terms_to_remove, " ", operator_attributes_json['filter_condition']) 
+                    where_line = re.sub(terms_to_remove, " ", sql_main_code['where'], re.MULTILINE)
+                    operator_filter = re.sub(terms_to_remove, " ", operator_attributes_json['filter_condition'])
                     if(fuzz.ratio(where_line.lower(),   operator_filter.lower())) > string_compare_threshold:
                             code_line = operator_attributes_json['filter_condition']
                             filter_flag = True
@@ -277,7 +286,7 @@ def identify_code(stats_df, sql_main_code, sql_cte_code):
                 join_conditions_list = re.findall("\((\s*(\w|\.)+\s*=\s*(\w|\.)+\s*)\)", operator_attributes_json['equality_join_condition'], re.IGNORECASE)
                 for join_condition in join_conditions_list: 
                     for join_table_line in sql_main_code['joins']:
-                        if (join_condition[0].lower() in str(join_table_line).lower()):
+                        if(fuzz.ratio(join_condition[0].lower(), str(join_table_line).lower())) > string_compare_threshold:
                             code_line = str(join_table_line)
                             join_flag = True
 
@@ -451,7 +460,6 @@ def identify_code(stats_df, sql_main_code, sql_cte_code):
 
 
 
-
 for tuple_item in query_id_code:
     query_id,  sql_file = tuple_item
     
@@ -466,7 +474,6 @@ for tuple_item in query_id_code:
     else :
         sql_cte_code = {}
 
-    
     operator_code_df   = identify_code(stats_df, sql_main_code, sql_cte_code)
     operator_code_df.sort('operator_id', ascending=False).show(50)
 
@@ -488,7 +495,7 @@ for tuple_item in query_id_code:
     rule_type = 'Query'
     rule_df = stats_history_df.filter(col('operator_type').in_('Join', 'CartesianJoin'))\
                             .withColumn('output_to_input_rows_ratio', stats_history_df['operator_statistics']['output_rows']/stats_history_df['operator_statistics']['input_rows'])\
-                            .filter(col('output_to_input_rows_ratio') > 1)
+                            .filter(col('output_to_input_rows_ratio') > output_to_input_rows_ratio_threshold)
                 
 
     if(rule_df.count() >= 1):
@@ -514,7 +521,7 @@ for tuple_item in query_id_code:
 
     # Rule 2 - Check for Memory Spillage to Local Storage - 'bytes_spilled_local_storage' in 'operator_statistics' should be > 0
     rule_type = 'Query, Warehouse'
-    rule_df = stats_history_df.filter(col('bytes_spilled_local_storage') > 0)
+    rule_df = stats_history_df.filter(col('bytes_spilled_local_storage') > bytes_spilled_local_storage_threshold)
 
     if(rule_df.count() >= 1):
         result = 'Fail'
@@ -538,7 +545,7 @@ for tuple_item in query_id_code:
 
    # Rule 3 - Check for Memory Spillage to Remote Storage - 'bytes_spilled_remote_storage' in 'operator_statistics' shouls be > 0
     rule_type = 'Query, Warehouse'
-    rule_df = stats_history_df.filter(col('bytes_spilled_remote_storage') > 0)
+    rule_df = stats_history_df.filter(col('bytes_spilled_remote_storage') > bytes_spilled_remote_storage_threshold)
 
     if(rule_df.count() >= 1):
         result = 'Fail'
@@ -563,7 +570,7 @@ for tuple_item in query_id_code:
 
     # Rule 4 - Inefficient partition pruning - more than 90% of the partitions are scanned
     rule_type = 'Query, Warehouse'
-    rule_df = stats_history_df.filter(col('partitions_scanned_ratio') >= 0.9)
+    rule_df = stats_history_df.filter(col('partitions_scanned_ratio') >= partitions_scanned_ratio_threshold)
 
     if(rule_df.count() >= 1):
         result = 'Fail'
@@ -587,7 +594,7 @@ for tuple_item in query_id_code:
    
     # Rule 5 - Query Queuing - check if queries are stuck in the queue
     rule_type = 'Warehouse'
-    rule_df = stats_history_df.filter(col('queued_overload_time') > 0)
+    rule_df = stats_history_df.filter(col('queued_overload_time') > queued_overload_time_threshold)
 
     if(rule_df.count() >= 1):
         result = 'Fail'
@@ -610,6 +617,13 @@ for tuple_item in query_id_code:
         result_df  = result_df.union(new_row_df.join(operator_code_df, 'operator_id').select('query_id', 'rule_number', 'rule_type', 'rule_description', 'result', 'comments', 'corresponding_code'))
    
 
+   # Rule 6 - Check 'Union without All'
+    rule_type = 'Query'
+    rule_df = stats_history_df.filter(col('queued_overload_time') > queued_overload_time_threshold)
+
+
+
+
 print("\nSnowflake Environment : ")
 params_df.show()
 
@@ -621,6 +635,7 @@ with pd.ExcelWriter(results_file_path) as writer:
     result_df.to_pandas().to_excel(writer, sheet_name="Results", header=True, index=False)
     
 print("Results are saved to : " + str(results_file_path)) 
+
 
 # Close Session
 session.close

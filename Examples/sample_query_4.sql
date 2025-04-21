@@ -23,6 +23,8 @@ ranked_customers AS (
     FROM 
         customer_revenue
 )
+
+
 SELECT 
     c.c_custkey,
     c.c_name,
